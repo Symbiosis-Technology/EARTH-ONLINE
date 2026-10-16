@@ -1,0 +1,1488 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>EARTH ONLINE // 现实增强标记系统</title>
+<style>
+:root{
+  --cy:#00ffd5; --cy2:#7df9ff; --dim:#0e5a55; --warn:#ffb347; --bad:#ff4d6d; --ok:#5cff9d;
+  --bg:#01060a;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;width:100%;overflow:hidden;background:var(--bg);color:var(--cy);
+  font-family:"SFMono-Regular",Menlo,Consolas,"Courier New","PingFang SC","Microsoft YaHei",monospace;
+  -webkit-user-select:none;user-select:none;-webkit-text-size-adjust:100%}
+#stage{position:fixed;inset:0;overflow:hidden;background:#01060a}
+#cam{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#000;transition:object-fit .2s;
+  filter:saturate(.72) contrast(1.12) brightness(.66) hue-rotate(-6deg)}
+#hud{position:absolute;inset:0;width:100%;height:100%;display:block}
+#fx{position:absolute;inset:0;pointer-events:none;
+  background:radial-gradient(120% 90% at 50% 45%,transparent 42%,rgba(0,0,0,.7) 100%);mix-blend-mode:screen}
+#fx::after{content:"";position:absolute;left:0;right:0;height:22vh;
+  background:linear-gradient(180deg,transparent,rgba(0,255,213,.06) 60%,rgba(0,255,213,.14));
+  animation:sweep 8s linear infinite}
+@keyframes sweep{0%{top:-25vh}100%{top:105vh}}
+
+/* 顶栏 */
+.top{position:absolute;top:0;left:0;right:0;height:28px;display:flex;align-items:center;gap:7px;
+  padding:0 7px;z-index:5;background:linear-gradient(180deg,rgba(0,18,22,.9),transparent)}
+.brand{font-size:11px;letter-spacing:2px;font-weight:700;color:var(--cy);
+  text-shadow:0 0 8px rgba(0,255,213,.8);border:1px solid var(--dim);padding:1px 5px;background:rgba(0,30,36,.5)}
+.brand b{color:#fff;font-weight:400}
+.meta{margin-left:auto;display:flex;gap:9px;font-size:9px;color:var(--cy2);opacity:.92;align-items:center;flex-wrap:nowrap}
+.meta .k{color:var(--dim)}
+.dot{display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--ok);
+  box-shadow:0 0 6px var(--ok);margin-right:3px;animation:blink 1.6s infinite}
+@keyframes blink{50%{opacity:.25}}
+#mFps.warnv{color:var(--warn)}
+
+/* 侧栏 */
+.side{position:absolute;top:31px;bottom:52px;z-index:5;display:flex;flex-direction:column;gap:5px;pointer-events:none}
+.side.l{left:6px;width:150px}
+.side.r{right:6px;width:186px}
+.card{background:rgba(0,18,24,.5);border:1px solid rgba(0,255,213,.16);padding:3px 5px}
+.card h4{font-size:8px;color:var(--dim);letter-spacing:1px;border-bottom:1px solid var(--dim);
+  padding-bottom:2px;margin-bottom:3px;display:flex;justify-content:space-between}
+.lrow{display:flex;gap:4px;align-items:center;padding:1px 3px;border-left:2px solid var(--cy);
+  background:rgba(0,30,36,.45);margin-bottom:2px;font-size:9px;cursor:pointer;pointer-events:auto}
+.lrow.sel{background:rgba(0,255,213,.24);color:#fff;border-left-color:#fff}
+.lrow i{font-style:normal;color:var(--cy2);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lrow u{text-decoration:none;color:var(--dim);font-size:8px}
+.listBody{max-height:38vh;overflow:hidden}
+.logBody{max-height:52vh;overflow:hidden;font-size:8.5px;line-height:1.45;text-align:right}
+.logBody div{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.aud{font-size:9px;line-height:1.65}
+.aud .big{font-size:12px;font-weight:700;letter-spacing:1px}
+.aud .bar{height:5px;background:#062a30;border:1px solid var(--dim);margin-top:3px;overflow:hidden}
+.aud .bar i{display:block;height:100%;width:0%;background:var(--cy);transition:width .12s}
+
+/* 控制栏 */
+.ctl{position:absolute;left:0;right:0;bottom:0;z-index:6;display:flex;align-items:center;
+  justify-content:center;gap:4px;padding:5px 5px calc(env(safe-area-inset-bottom) + 3px);
+  background:linear-gradient(0deg,rgba(0,18,22,.94),transparent);overflow-x:auto;-webkit-overflow-scrolling:touch}
+.ctl::-webkit-scrollbar{display:none}
+.btn{flex:0 0 auto;font:inherit;font-size:9.5px;color:var(--cy);background:rgba(0,32,38,.7);
+  border:1px solid var(--dim);padding:6px 6px;letter-spacing:.5px;cursor:pointer;white-space:nowrap}
+.btn.on{background:rgba(0,255,213,.22);color:#eafffb;border-color:var(--cy);box-shadow:0 0 8px rgba(0,255,213,.3)}
+.btn.act{color:#01121a;background:var(--cy);border-color:var(--cy);font-weight:700}
+
+/* 开机 */
+#boot{position:absolute;inset:0;z-index:20;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;background:radial-gradient(70% 70% at 50% 45%,#04222a,#01060a 78%)}
+#boot::before{content:"";position:absolute;inset:0;pointer-events:none;
+  background:repeating-linear-gradient(0deg,rgba(0,255,213,.05) 0 1px,transparent 1px 3px)}
+.bwrap{position:relative;width:100%;max-width:560px;padding:0 14px;display:flex;flex-direction:column;
+  align-items:center;gap:5px}
+.blogo{font-size:21px;letter-spacing:5px;color:#eafffb;text-shadow:0 0 16px rgba(0,255,213,.9);font-weight:700}
+.blogo b{color:var(--cy);font-weight:400}
+.bsub{font-size:9px;letter-spacing:3px;color:var(--cy2);opacity:.85}
+.ring{position:relative;width:66px;height:66px;margin:1px 0}
+.ring i{position:absolute;inset:0;border-radius:50%;border:1px solid rgba(0,255,213,.25);border-top-color:var(--cy);
+  animation:spin 1.7s linear infinite}
+.ring i:nth-child(2){inset:8px;border-top-color:transparent;border-left-color:var(--cy2);
+  animation-duration:2.6s;animation-direction:reverse}
+.ring i:nth-child(3){inset:16px;border-top-color:transparent;border-right-color:var(--warn);animation-duration:3.4s}
+.ring::after{content:"";position:absolute;inset:24px;border-radius:50%;background:var(--cy);
+  box-shadow:0 0 20px var(--cy);animation:pulse 1.5s ease-in-out infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes pulse{0%,100%{opacity:.35;transform:scale(.82)}50%{opacity:1;transform:scale(1.08)}}
+.blines{width:100%;min-height:120px;max-height:36vh;overflow:hidden;font-size:11px;line-height:1.5}
+.blines .ln{display:flex;gap:6px;opacity:0;transform:translateY(4px);animation:in .2s forwards}
+@keyframes in{to{opacity:1;transform:none}}
+.blines .tag{color:var(--dim);flex:0 0 auto}
+.ln.ok .tag{color:var(--ok)} .ln.bad .tag{color:var(--bad)} .ln.work .tag{color:var(--warn)}
+.ln.ok .tx{color:#eafffb} .ln.work .tx{color:var(--cy2)} .ln.bad .tx{color:var(--bad)}
+.ln .cur{width:6px;background:var(--cy);animation:blink .7s steps(1) infinite}
+#prog{width:100%;max-width:420px;height:3px;background:#062a30;border:1px solid var(--dim);overflow:hidden}
+#prog i{display:block;height:100%;width:0%;background:var(--cy);box-shadow:0 0 8px var(--cy);transition:width .3s}
+.btip{font-size:10px;letter-spacing:1.5px;color:var(--cy2);opacity:.9;text-align:center;line-height:1.6;
+  min-height:14px}
+#tap{margin-top:1px;font-size:11px;letter-spacing:2px;color:#01121a;background:var(--cy);border:none;
+  padding:9px 18px;font-family:inherit;font-weight:700;cursor:pointer;animation:glow 1.8s ease-in-out infinite}
+@keyframes glow{0%,100%{box-shadow:0 0 0 rgba(0,255,213,0)}50%{box-shadow:0 0 18px rgba(0,255,213,.85)}}
+#boot.done{transition:opacity .5s;opacity:0}
+#flash{position:absolute;inset:0;background:#eafffb;opacity:0;pointer-events:none;z-index:25;transition:opacity .45s}
+
+/* 提示 */
+#toast{position:absolute;left:50%;bottom:64px;transform:translateX(-50%);z-index:30;font-size:11px;
+  color:var(--warn);border:1px solid #6b4a12;background:rgba(20,10,0,.88);padding:8px 12px;display:none;
+  max-width:86%;line-height:1.5;text-align:center}
+
+/* 竖屏提示 */
+#rotate{position:absolute;inset:0;z-index:60;display:none;flex-direction:column;align-items:center;
+  justify-content:center;gap:16px;background:#01060a;color:var(--cy);text-align:center;padding:24px}
+#rotate .ph{width:52px;height:88px;border:2px solid var(--cy);border-radius:8px;position:relative;
+  animation:rot 2.4s ease-in-out infinite}
+#rotate .ph::after{content:"";position:absolute;left:6px;right:6px;bottom:6px;height:2px;background:var(--dim)}
+@keyframes rot{0%,40%{transform:rotate(0)}60%,100%{transform:rotate(-90deg)}}
+#rotate p{font-size:12px;letter-spacing:2px}
+#rotate small{font-size:10px;color:var(--dim)}
+@media (orientation:portrait){#rotate{display:flex}}
+@media (orientation:portrait) and (min-width:820px){#rotate{display:none}}
+</style>
+</head>
+<body>
+<div id="stage">
+  <video id="cam" playsinline muted autoplay></video>
+  <canvas id="hud"></canvas>
+  <div id="fx"></div>
+
+  <div class="top">
+    <div class="brand">EARTH<b>·</b>ONLINE</div>
+    <div class="meta">
+      <span><span class="dot"></span><span id="mState">BOOTING</span></span>
+      <span><span class="k">锁定</span> <span id="mLock">0</span></span>
+      <span><span class="k">FPS</span> <span id="mFps">--</span></span>
+      <span><span class="k">核心</span> <span id="mCore">--</span></span>
+      <span><span class="k">镜头</span> <span id="mCam">--</span></span>
+    </div>
+  </div>
+
+  <div class="side l">
+    <div class="card">
+      <h4><span>TRACK LIST · 锁定清单</span><span id="mCnt">0</span></h4>
+      <div class="listBody" id="listBody"></div>
+    </div>
+    <div class="card">
+      <h4><span>AUDIO SENSOR · 声音识别</span><span id="aState">OFF</span></h4>
+      <div class="aud">
+        <div>类型 <span class="big" id="aLabel">--</span> <span id="aEn" style="color:var(--dim)"></span></div>
+        <div>强度 <span id="aDb">-99</span> dB · 主频 <span id="aHz">0</span> Hz</div>
+        <div class="bar"><i id="aBar"></i></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="side r">
+    <div class="card" style="flex:1;display:flex;flex-direction:column">
+      <h4><span>SYSTEM LOG · 系统日志</span><span id="mLogN">0</span></h4>
+      <div class="logBody" id="logBody"></div>
+    </div>
+  </div>
+
+  <div class="ctl" id="ctl">
+    <button class="btn act" data-k="obj">物体</button>
+    <button class="btn act" data-k="pose">骨骼</button>
+    <button class="btn act" data-k="color">颜色</button>
+    <button class="btn act" data-k="detail">细节</button>
+    <button class="btn act" data-k="audio">声音</button>
+    <button class="btn" data-k="motion">运动</button>
+    <button class="btn" data-k="trail">轨迹</button>
+    <button class="btn" data-k="sfx">音效</button>
+    <button class="btn" data-k="freeze">冻结</button>
+    <button class="btn" data-k="swap">切换镜头</button>
+    <button class="btn" data-k="mir">镜像</button>
+    <button class="btn on" data-k="fit">铺满</button>
+    <button class="btn" data-k="cap">捕获</button>
+    <button class="btn" data-k="full">全屏</button>
+  </div>
+
+  <div id="boot">
+    <div class="bwrap">
+      <div class="blogo">EARTH<b>·</b>ONLINE</div>
+      <div class="bsub">REALITY AUGMENTATION LAYER</div>
+      <div class="ring"><i></i><i></i><i></i></div>
+      <div class="blines" id="bline"></div>
+      <div id="prog"><i></i></div>
+      <div class="btip" id="btip">点击开始接入 · 将请求摄像头与麦克风权限</div>
+      <button id="tap">▶ 接入系统 / BOOT</button>
+    </div>
+  </div>
+  <div id="flash"></div>
+  <div id="toast"></div>
+
+  <div id="rotate">
+    <div class="ph"></div>
+    <p>请横屏使用</p>
+    <small>EARTH ONLINE 现实增强层需要横向视野</small>
+  </div>
+</div>
+
+<script type="module">
+/* ============================================================
+   EARTH ONLINE — 现实增强标记系统（横屏 · 修复版）
+   ============================================================ */
+const $ = s => document.querySelector(s);
+const video = $('#cam'), hud = $('#hud'), ctx = hud.getContext('2d');
+const boot = $('#boot'), prog = $('#prog i'), btline = $('#bline'), btip = $('#btip'), tapBtn = $('#tap');
+const toastEl = $('#toast');
+
+const C = {cy:'#00ffd5', cy2:'#7df9ff', dim:'#0e5a55', warn:'#ffb347', bad:'#ff4d6d',
+           ok:'#5cff9d', white:'#eafffb', voice:'#ffd166'};
+const BG = 'rgba(0,12,16,.62)';
+
+const S = {
+  obj:true, pose:true, color:true, detail:true, audio:true, motion:false, trail:true, freeze:false,
+  sfx:true, mirror:false, fit:'cover', degrade:0,
+  targets:[], seq:1, selected:-1, src:video, ready:false, fps:0,
+  poses:[], lastColor:0, yoloDets:null, yoloTs:0,
+  au:{on:false, db:-99, hz:0, label:'--', en:'', spec:null, col:C.cy2}
+};
+const sleep = ms => new Promise(r=>setTimeout(r,ms));
+
+function toast(msg, ms=3000){
+  toastEl.textContent = msg; toastEl.style.display='block';
+  clearTimeout(toast._t); toast._t = setTimeout(()=>toastEl.style.display='none', ms);
+}
+let logN = 0;
+function log(msg, lv){
+  const d = document.createElement('div');
+  d.textContent = `[${new Date().toTimeString().slice(0,8)}] ${msg}`;
+  d.style.color = lv==='warn'?C.warn : lv==='bad'?C.bad : lv==='ok'?C.ok : C.cy2;
+  const box = $('#logBody'); box.prepend(d);
+  while(box.children.length > 20) box.lastChild.remove();
+  $('#mLogN').textContent = ++logN;
+}
+
+/* ============================================================
+   音频引擎（Web Audio 全合成）
+   ============================================================ */
+let AC=null, master=null, sfxGain=null, musicGain=null, musicTimer=null, musicNodes=[], musicOn=false;
+function initAudio(){
+  if(AC) return AC;
+  const A = window.AudioContext || window.webkitAudioContext;
+  if(!A) return null;
+  AC = new A();
+  master = AC.createGain(); master.gain.value = 0.85; master.connect(AC.destination);
+  sfxGain = AC.createGain(); sfxGain.gain.value = 0.55; sfxGain.connect(master);
+  musicGain = AC.createGain(); musicGain.gain.value = 0.0001; musicGain.connect(master);
+  return AC;
+}
+const resumeAC = ()=>{ if(AC && AC.state !== 'running') AC.resume().catch(()=>{}); };
+function tone({f=880, f2=null, d=0.1, type='square', vol=0.25, delay=0, dest=null}={}){
+  if(!AC || !S.sfx) return;
+  const t0 = AC.currentTime + delay;
+  const o = AC.createOscillator(), g = AC.createGain();
+  o.type = type; o.frequency.setValueAtTime(f, t0);
+  if(f2) o.frequency.exponentialRampToValueAtTime(Math.max(20,f2), t0 + d*0.92);
+  g.gain.setValueAtTime(0.0001, t0);
+  g.gain.linearRampToValueAtTime(vol, t0 + Math.min(0.012, d*0.2));
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + d);
+  o.connect(g); g.connect(dest || sfxGain);
+  o.start(t0); o.stop(t0 + d + 0.03);
+}
+function noise({d=0.14, vol=0.18, hp=900, lp=null, delay=0}={}){
+  if(!AC || !S.sfx) return;
+  const n = Math.max(1, Math.floor(AC.sampleRate*d));
+  const buf = AC.createBuffer(1, n, AC.sampleRate), ch = buf.getChannelData(0);
+  for(let i=0;i<n;i++) ch[i] = (Math.random()*2-1) * (1 - i/n);
+  const s = AC.createBufferSource(); s.buffer = buf;
+  const f1 = AC.createBiquadFilter(); f1.type='highpass'; f1.frequency.value = hp;
+  let node = s; node.connect(f1); node = f1;
+  if(lp){ const f2 = AC.createBiquadFilter(); f2.type='lowpass'; f2.frequency.value=lp; node.connect(f2); node=f2; }
+  const g = AC.createGain(); g.gain.value = vol;
+  node.connect(g); g.connect(sfxGain);
+  s.start(AC.currentTime + delay);
+}
+const SFX = {
+  key(){ tone({f:1900+Math.random()*500, d:0.016, type:'square', vol:0.05}); },
+  type(){ tone({f:2400, d:0.01, type:'square', vol:0.032}); },
+  boot(){ tone({f:70, f2:420, d:1.0, type:'sine', vol:0.3}); tone({f:140, f2:840, d:1.0, type:'triangle', vol:0.12});
+          noise({d:0.9, vol:0.1, hp:300, lp:2600}); },
+  ok(){ tone({f:660, f2:990, d:0.13, type:'square', vol:0.16});
+        tone({f:1320, d:0.09, type:'triangle', vol:0.1, delay:0.08}); },
+  work(){ for(let i=0;i<3;i++) tone({f:520+i*90, d:0.05, type:'square', vol:0.1, delay:i*0.07}); },
+  fail(){ tone({f:320, f2:90, d:0.5, type:'sawtooth', vol:0.2}); },
+  chord(){ [523.25,659.25,783.99,1046.5].forEach((f,i)=>tone({f, d:0.9, type:'triangle', vol:0.11, delay:i*0.05}));
+           noise({d:0.7, vol:0.12, hp:400, lp:5000}); },
+  gate(){ tone({f:40, f2:120, d:0.8, type:'sine', vol:0.32});
+          noise({d:1.1, vol:0.16, hp:150, lp:3200});
+          tone({f:880, f2:1760, d:0.5, type:'triangle', vol:0.1, delay:0.15}); },
+  lock(){ tone({f:1200, f2:1700, d:0.06, type:'square', vol:0.1}); },
+  lost(){ tone({f:520, f2:300, d:0.09, type:'square', vol:0.07}); },
+  click(){ tone({f:760, d:0.035, type:'square', vol:0.11}); }
+};
+let fxLockT=0, fxLostT=0;
+const lockFx = ()=>{ const n=performance.now(); if(n-fxLockT<260) return; fxLockT=n; SFX.lock(); };
+const lostFx = ()=>{ const n=performance.now(); if(n-fxLostT<500) return; fxLostT=n; SFX.lost(); };
+
+function startBootMusic(){
+  if(!AC || musicOn) return;
+  musicOn = true;
+  const t = AC.currentTime;
+  musicGain.gain.cancelScheduledValues(t);
+  musicGain.gain.setValueAtTime(0.0001, t);
+  musicGain.gain.linearRampToValueAtTime(0.5, t + 1.4);
+  const filt = AC.createBiquadFilter(); filt.type='lowpass'; filt.frequency.value=560; filt.Q.value=5;
+  const dl = AC.createDelay(0.5); dl.delayTime.value = 0.19;
+  const fb = AC.createGain(); fb.gain.value = 0.28;
+  filt.connect(dl); dl.connect(fb); fb.connect(dl); dl.connect(musicGain); filt.connect(musicGain);
+  [55, 82.41, 110, 164.81].forEach((f,i)=>{
+    const o = AC.createOscillator(); o.type = i>1 ? 'triangle':'sawtooth'; o.frequency.value = f;
+    const g = AC.createGain(); g.gain.value = i>1 ? 0.05 : 0.075;
+    o.connect(g); g.connect(filt); o.start(); musicNodes.push(o);
+  });
+  const lfo = AC.createOscillator(); lfo.frequency.value = 0.11;
+  const lg = AC.createGain(); lg.gain.value = 300;
+  lfo.connect(lg); lg.connect(filt.frequency); lfo.start(); musicNodes.push(lfo);
+  const seq = [220,329.63,440,523.25,659.25,523.25,440,329.63, 246.94,392,493.88,587.33];
+  let i = 0;
+  musicTimer = setInterval(()=>{
+    if(!AC || AC.state!=='running') return;
+    tone({f: seq[i%seq.length]*2, d:0.26, type:'square', vol:0.055, dest:musicGain});
+    if(i%4===0) tone({f: seq[i%seq.length]/2, d:0.3, type:'sine', vol:0.09, dest:musicGain});
+    i++;
+  }, 190);
+}
+function stopBootMusic(fade=1.2){
+  clearInterval(musicTimer); musicTimer=null; musicOn=false;
+  if(!AC) return;
+  const t = AC.currentTime;
+  musicGain.gain.cancelScheduledValues(t);
+  musicGain.gain.setValueAtTime(musicGain.gain.value, t);
+  musicGain.gain.linearRampToValueAtTime(0.0001, t + fade);
+  const nodes = musicNodes; musicNodes = [];
+  setTimeout(()=>nodes.forEach(o=>{ try{o.stop()}catch(e){} }), fade*1000 + 120);
+}
+
+/* ============================================================
+   摄像头管理（含切换 / 镜像）
+   ============================================================ */
+let camStream = null, camList = [], camIdx = 0, curFacing = 'environment', camLabel = '默认';
+async function refreshCams(){
+  try{
+    const ds = await navigator.mediaDevices.enumerateDevices();
+    camList = ds.filter(d => d.kind === 'videoinput' && d.deviceId);
+    return camList;
+  }catch(e){ camList = []; return camList; }
+}
+function isFront(lbl){ return /front|前置|user|facing front|正前/i.test(lbl||''); }
+async function openCamera(opts){
+  const base = { width:{ideal:1280}, height:{ideal:720} };
+  let st = null, err = null;
+  const tries = [];
+  if(opts && opts.deviceId) tries.push({ device:{ deviceId:{exact:opts.deviceId} }, ...base });
+  if(opts && opts.facing)   tries.push({ device:{ facingMode:{ideal:opts.facing} }, ...base });
+  tries.push({ device:{ facingMode:{ideal:curFacing} }, ...base });
+  tries.push({ device:{}, ...base });
+  tries.push({ device:true });
+  for(const t of tries){
+    try{ st = await navigator.mediaDevices.getUserMedia({ video: t.device, audio:false }); break; }
+    catch(e){ err = e; }
+  }
+  if(!st) throw err || new Error('camera unavailable');
+  if(camStream) camStream.getTracks().forEach(k=>k.stop());
+  camStream = st;
+  video.srcObject = st;
+  video.muted = true;
+  try{ await video.play(); }catch(e){}
+  await new Promise(r=>{ if(video.videoWidth) r(); else video.onloadedmetadata = r; });
+  for(let i=0;i<40;i++){ if(video.videoWidth >= 16) break; await new Promise(r=>setTimeout(r,50)); }
+  if(video.videoWidth < 16) throw new Error('NO_VIDEO_FRAME');
+  const tr = st.getVideoTracks()[0];
+  const set = tr.getSettings ? tr.getSettings() : {};
+  camLabel = (tr.label || '').slice(0,14) || '摄像头';
+  let m = false;
+  if(opts && opts.forceMirror != null) m = opts.forceMirror;
+  else if(set.facingMode) m = /user|front/i.test(set.facingMode);
+  else if(tr.label) m = isFront(tr.label);
+  else if(opts && opts.facing) m = opts.facing === 'user';
+  S.mirror = m;
+  S.src = video;
+  updateMap();
+  $('#mCam').textContent = camLabel;
+  document.querySelector('.btn[data-k="mir"]').classList.toggle('on', S.mirror);
+  return true;
+}
+async function switchCam(){
+  S.switching = true;
+  await refreshCams();
+  toast('正在切换镜头 …', 1500);
+  SFX.click();
+  try{
+    if(camList.length >= 2){
+      camIdx = (camIdx + 1) % camList.length;
+      await openCamera({ deviceId: camList[camIdx].deviceId });
+    } else {
+      curFacing = curFacing === 'environment' ? 'user' : 'environment';
+      await openCamera({ facing: curFacing });
+    }
+    await refreshCams();
+    const tr = camStream && camStream.getVideoTracks()[0];
+    const nm = (tr && tr.label) ? tr.label.slice(0,16) : (curFacing==='user'?'前置':'后置');
+    log(`镜头已切换 · ${nm} · ${video.videoWidth}×${video.videoHeight}`, 'ok');
+    toast('镜头：' + nm, 1600);
+    // 切换后清空目标，避免旧框错位
+    S.targets.length = 0; S.selected = -1;
+    S.motDets = null; S.yoloDets = null;
+    S.switching = false;
+  }catch(e){
+    S.switching = false;
+    log('镜头切换失败：' + (e.name||e.message||''), 'bad');
+    toast('切换失败：' + (e.name||'无法访问该镜头'));
+  }
+}
+
+/* ============================================================
+   声音识别
+   ============================================================ */
+let micTrack=null, analyser=null, micSrc=null, fData=null, tData=null;
+let auHist=[], onsetT=[], auSmooth=0, auLast=0, auLabel='--', auCount=0, auImpactUntil=0, auLogT=0;
+async function initMic(){
+  try{
+    const st = await navigator.mediaDevices.getUserMedia({
+      audio:{ echoCancellation:false, noiseSuppression:false, autoGainControl:false } });
+    micTrack = st.getAudioTracks()[0];
+    if(!AC) initAudio();
+    if(!AC) throw new Error('no AC');
+    micSrc = AC.createMediaStreamSource(st);
+    analyser = AC.createAnalyser(); analyser.fftSize = 2048; analyser.smoothingTimeConstant = 0.75;
+    micSrc.connect(analyser);
+    fData = new Uint8Array(analyser.frequencyBinCount);
+    tData = new Float32Array(analyser.fftSize);
+    S.au.on = true;
+    $('#aState').textContent = 'ON'; $('#aState').style.color = C.ok;
+    log('声音传感器接入 · 频率分析已启动','ok');
+    return true;
+  }catch(e){
+    S.au.on = false; S.audio = false;
+    $('#aState').textContent = 'NO-MIC'; $('#aState').style.color = C.bad;
+    log('麦克风不可用 · 声音识别已关闭','warn');
+    syncBtns();
+    return false;
+  }
+}
+function audioTick(){
+  if(!S.audio || !analyser) return;
+  analyser.getByteFrequencyData(fData);
+  analyser.getFloatTimeDomainData(tData);
+  let sum=0; for(let i=0;i<tData.length;i++) sum += tData[i]*tData[i];
+  const rms = Math.sqrt(sum/tData.length);
+  const db = 20*Math.log10(rms + 1e-9);
+  const binHz = (AC.sampleRate/2) / fData.length;
+  let mi=1, mv=0, tot=0, wsum=0;
+  for(let i=1;i<fData.length;i++){
+    const v = fData[i];
+    if(v>mv){ mv=v; mi=i; }
+    tot += v; wsum += v*i;
+  }
+  const hz = mi*binHz, cen = tot>0 ? (wsum/tot)*binHz : 0;
+  const spec = new Uint8Array(40);
+  const step = Math.max(1, Math.floor(fData.length*0.5/40));
+  for(let i=0;i<40;i++){ let m=0; for(let j=0;j<step;j++){ const v=fData[i*step+j]; if(v>m) m=v; } spec[i]=m; }
+
+  const e = rms, now = performance.now();
+  auSmooth = auSmooth*0.9 + e*0.1;
+  let transient = (e > Math.max(0.05, auSmooth*4.5)) && db > -32;
+  if(transient) auImpactUntil = now + 700;
+  else if(now < auImpactUntil) transient = true;
+  if(transient && now - auLast > 260){ onsetT.push(now); auLast = now; if(onsetT.length>8) onsetT.shift(); }
+  let beat = false;
+  if(onsetT.length >= 4){
+    const iv=[]; for(let i=1;i<onsetT.length;i++) iv.push(onsetT[i]-onsetT[i-1]);
+    const avg = iv.reduce((a,b)=>a+b,0)/iv.length;
+    const sd = Math.sqrt(iv.reduce((a,b)=>a+(b-avg)*(b-avg),0)/iv.length);
+    beat = avg>240 && avg<1600 && sd<170;
+  }
+  auHist.push(e); if(auHist.length>50) auHist.shift();
+  const avgE = auHist.reduce((a,b)=>a+b,0)/auHist.length;
+
+  let lab, en, col;
+  if(db < -55){ lab='静音'; en='QUIET'; col=C.dim; }
+  else if(transient){ lab='撞击/敲击'; en='IMPACT'; col=C.warn; }
+  else if(beat){ lab='节律/音乐'; en='RHYTHM'; col=C.ok; }
+  else if(hz>=70 && hz<=340 && cen<1600){ lab='人声'; en='VOICE'; col=C.voice; }
+  else if(cen>3200){ lab='高频噪声'; en='HISS'; col=C.cy2; }
+  else if(avgE>0.004){ lab='环境声'; en='AMBIENT'; col=C.cy; }
+  else { lab='微弱声响'; en='FAINT'; col=C.cy2; }
+  if(lab !== auLabel){
+    if(auCount>2 && now-auLogT>1800 && lab!=='静音'){
+      log(`声音识别 · ${lab}（${en}）`, lab==='撞击/敲击'?'warn':'ok'); auLogT = now;
+    }
+    auLabel = lab; auCount++;
+  }
+  S.au.db=db; S.au.hz=hz; S.au.label=lab; S.au.en=en; S.au.col=col; S.au.spec=spec;
+  $('#aLabel').textContent = lab; $('#aLabel').style.color = col;
+  $('#aEn').textContent = en;
+  $('#aDb').textContent = db.toFixed(0);
+  $('#aHz').textContent = Math.round(hz);
+  $('#aBar').style.width = Math.min(100, Math.max(0, (db+72)/72*100)) + '%';
+  $('#aBar').style.background = col;
+}
+
+/* ============================================================
+   COCO 类别表
+   ============================================================ */
+const INFO = {
+  person:['人形单位','生物','碳基生命体 · 具备自主决策模块'],
+  bicycle:['自行车','载具','双轮人力驱动装置'], car:['汽车','载具','四轮内燃/电动载具'],
+  motorcycle:['摩托车','载具','双轮机动载具'], airplane:['飞行器','载具','固定翼航空器'],
+  bus:['公共汽车','载具','大型客运载具'], train:['列车','载具','轨道运输单元'],
+  truck:['卡车','载具','货运载具'], boat:['船','载具','水面航行器'],
+  traffic_light:['信号灯','设施','交通状态指示终端'], fire_hydrant:['消防栓','设施','消防供水接口'],
+  stop_sign:['停止标志','设施','强制停止指令牌'], parking_meter:['停车计时器','设施','泊位计费终端'],
+  bench:['长椅','家具','公共休憩平台'], bird:['鸟类','生物','飞行动物 · 低威胁'],
+  cat:['猫科生物','生物','小型捕食者 · 情绪模块不稳定'], dog:['犬科生物','生物','驯化同伴单位'],
+  horse:['马','生物','大型驯化生物'], sheep:['羊','生物','群居草食单位'], cow:['牛','生物','大型草食单位'],
+  elephant:['象','生物','超大型陆地生物'], bear:['熊','生物','高威胁野生动物'],
+  zebra:['斑马','生物','条纹标记草食单位'], giraffe:['长颈鹿','生物','超高草食单位'],
+  backpack:['背包','装备','个人物资容器'], umbrella:['雨伞','装备','降水遮蔽装置'],
+  handbag:['手提包','装备',null], tie:['领带','装备','装饰性织物'], suitcase:['行李箱','装备','移动物资容器'],
+  frisbee:['飞盘','娱乐',null], skis:['滑雪板','运动',null], snowboard:['雪板','运动',null],
+  sports_ball:['球体','娱乐','可弹射球体'], kite:['风筝','娱乐',null],
+  baseball_bat:['球棒','装备','钝击类器械'], baseball_glove:['棒球手套','装备',null],
+  skateboard:['滑板','载具','人力滑行平台'], surfboard:['冲浪板','运动',null],
+  tennis_racket:['网球拍','运动',null], bottle:['容器（瓶）','物资','液体储存单元'],
+  wine_glass:['玻璃杯','物资','易碎容器'], cup:['杯具','物资','盛放容器'],
+  fork:['餐具（叉）','物资',null], knife:['刀具','物资','锐器 · 谨慎接触'],
+  spoon:['餐具（勺）','物资',null], bowl:['碗','物资',null],
+  banana:['香蕉','食物','高钾补给物'], apple:['苹果','食物',null], sandwich:['三明治','食物',null],
+  orange:['橙子','食物',null], broccoli:['西兰花','食物',null], carrot:['胡萝卜','食物',null],
+  hot_dog:['热狗','食物',null], pizza:['披萨','食物',null], donut:['甜甜圈','食物','高糖补给'],
+  cake:['蛋糕','食物',null], chair:['座椅','家具','单点支撑坐具'], couch:['沙发','家具','多人坐具'],
+  potted_plant:['盆栽','生物','室内植物单位'], bed:['床具','家具','休眠平台'],
+  dining_table:['餐桌','家具','水平承载平台'], toilet:['卫生设施','设施',null],
+  tv:['显示终端','电子','影像输出设备'], laptop:['便携计算终端','电子','通用运算设备'],
+  mouse:['输入设备','电子',null], remote:['遥控器','电子','无线指令发射器'],
+  keyboard:['键盘','电子','字符输入阵列'], cell_phone:['通讯终端','电子','移动通信节点'],
+  microwave:['微波装置','家电',null], oven:['烤箱','家电',null], toaster:['烤面包机','家电',null],
+  sink:['水槽','设施',null], refrigerator:['冷藏装置','家电','低温物资仓储'],
+  book:['书本','物资','离线数据存储介质'], clock:['计时器','设施','时间指示终端'],
+  vase:['花瓶','物资',null], scissors:['剪刀','工具','剪切类锐器'],
+  teddy_bear:['玩偶','物资','拟人化安抚物件'], hair_drier:['吹风装置','家电',null],
+  toothbrush:['牙刷','物资',null]
+};
+const YOLO_CLS = Object.keys(INFO);
+const HREAL = {person:1.70,chair:0.9,couch:0.85,bed:0.6,dining_table:0.75,car:1.5,bicycle:1.1,
+  motorcycle:1.2,bus:3.2,truck:3.0,bottle:0.25,cup:0.12,laptop:0.25,cell_phone:0.15,tv:0.6,
+  book:0.25,dog:0.6,cat:0.28,banana:0.18,backpack:0.45,suitcase:0.6,bench:0.45,potted_plant:0.5};
+const infoOf = cls => { const v = INFO[cls]; return v ? {cn:v[0], cat:v[1], desc:v[2]} : null; };
+/* 无模型时的启发式推测 */
+function guess(t){
+  const ar = t.bw / Math.max(1e-4, t.bh);
+  const a = t.bw * t.bh;
+  if(a > 0.5) return {cn:'大面积区域', cat:'环境', desc:'非独立实体 · 可能是背景'};
+  if(ar > 0.15 && ar < 0.8 && t.bh > 0.22) return {cn:'疑似直立物体', cat:'未确认', desc:'竖直轮廓 · 疑似人形/立柱'};
+  if(ar > 1.8) return {cn:'疑似台面/横长体', cat:'环境', desc:'水平延展结构'};
+  if(a < 0.008) return {cn:'小型物件', cat:'物件', desc:'体积过小 · 特征不足'};
+  if(t.y > 0.75) return {cn:'地面物体', cat:'物件', desc:'位于视野下部'};
+  return {cn:'未知物件', cat:'物件', desc:'特征不足 · 未建模'};
+}
+function describe(t){
+  if(t.cls && t.cls !== 'unknown') return infoOf(t.cls) || guess(t);
+  return guess(t);
+}
+function colorName(r,g,b){
+  const mx=Math.max(r,g,b), mn=Math.min(r,g,b), d=mx-mn, l=(mx+mn)/2/255;
+  let h=0; if(d){ if(mx===r) h=((g-b)/d+6)%6; else if(mx===g) h=(b-r)/d+2; else h=(r-g)/d+4; h*=60; }
+  const s = mx ? d/mx : 0;
+  if(l<.12) return '近黑'; if(l>.92 && s<.15) return '纯白'; if(s<.12) return l>.6?'浅灰':'深灰';
+  const seg=[[15,'红'],[40,'橙'],[65,'黄'],[95,'黄绿'],[150,'绿'],[185,'青'],[215,'天蓝'],[255,'蓝'],
+             [285,'紫'],[330,'品红'],[345,'玫红'],[360,'红']];
+  let n='红'; for(const [v,nm] of seg){ if(h<v){ n=nm; break; } }
+  return (l>.72?'浅':(l<.32?'深':'')) + n + (s<.28?'灰调':(s>.75?'鲜艳':''));
+}
+const hex = (r,g,b)=>'#'+[r,g,b].map(v=>v.toString(16).padStart(2,'0')).join('').toUpperCase();
+
+/* ============================================================
+   识别通道
+   ============================================================ */
+let V=null, detector=null, poser=null;
+const VISION_SRCS = [
+  'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs',
+  'https://unpkg.com/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs'
+];
+const WASM_SRCS = [
+  'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm',
+  'https://unpkg.com/@mediapipe/tasks-vision@0.10.14/wasm'
+];
+const M_OBJ_LIST = [
+  'https://storage.googleapis.com/mediapipe-models/object_detector/efficientdet_lite0/float16/1/efficientdet_lite0.tflite',
+  'https://storage.googleapis.com/mediapipe-models/object_detector/efficientdet_lite0/int8/1/efficientdet_lite0.tflite'
+];
+const M_POSE_LIST = [
+  'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task'
+];
+const LEGACY_POSE = 'https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js';
+const LEGACY_BASE = 'https://cdn.jsdelivr.net/npm/@mediapipe/pose/';
+const ORT_URL  = 'https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.mjs';
+const ORT_WASM = 'https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/';
+const YOLO_URL = 'https://cdn.jsdelivr.net/gh/AndreyGermanov/yolov8_inference_video_javascript@main/yolov8n.onnx';
+const withTimeout = (p, ms) => Promise.race([p, new Promise((_,rej)=>setTimeout(()=>rej(new Error('TIMEOUT')), ms))]);
+
+async function initModelsCore(){
+  let files = null;
+  for(let i=0;i<VISION_SRCS.length;i++){
+    try{ V = await import(VISION_SRCS[i]); }
+    catch(e){ try{ V = await import(WASM_SRCS[i] + '/vision_bundle.mjs'); }catch(e2){ V=null; } }
+    if(!V || !V.FilesetResolver) continue;
+    for(const w of WASM_SRCS){
+      try{ files = await V.FilesetResolver.forVisionTasks(w); break; }catch(e){}
+    }
+    if(files) break;
+  }
+  if(!files) throw new Error('VISION_UNAVAILABLE');
+  if(V.ObjectDetector){
+    for(const url of M_OBJ_LIST){
+      for(const del of ['GPU','CPU']){
+        try{
+          detector = await V.ObjectDetector.createFromOptions(files, {
+            baseOptions:{modelAssetPath:url, delegate:del},
+            scoreThreshold:0.35, maxResults:10, runningMode:'VIDEO'});
+          break;
+        }catch(e){ detector=null; }
+      }
+      if(detector) break;
+    }
+  }
+  if(V.PoseLandmarker){
+    for(const url of M_POSE_LIST){
+      for(const del of ['GPU','CPU']){
+        try{
+          poser = await V.PoseLandmarker.createFromOptions(files, {
+            baseOptions:{modelAssetPath:url, delegate:del}, runningMode:'VIDEO', numPoses:3,
+            minPoseDetectionConfidence:0.4, minPosePresenceConfidence:0.4, minTrackingConfidence:0.4});
+          break;
+        }catch(e){ poser=null; }
+      }
+      if(poser) break;
+    }
+  }
+  if(!detector && !poser) throw new Error('NO_MODEL');
+}
+let legacyPose=null, legacyBusy=false;
+function loadScript(src){
+  return new Promise((res,rej)=>{
+    const el=document.createElement('script'); el.src=src; el.crossOrigin='anonymous';
+    el.onload=res; el.onerror=()=>rej(new Error('script fail'));
+    document.head.appendChild(el);
+  });
+}
+async function initLegacyPose(){
+  if(!window.Pose) await loadScript(LEGACY_POSE);
+  const P = window.Pose; if(!P) throw new Error('no Pose');
+  legacyPose = new P({ locateFile: f => LEGACY_BASE + f });
+  legacyPose.setOptions({ modelComplexity:0, smoothLandmarks:true,
+    minDetectionConfidence:0.5, minTrackingConfidence:0.5 });
+  legacyPose.onResults(r=>{
+    const lm = r.poseLandmarks;
+    S.poses = lm ? [ lm.map(l=>({x:l.x, y:l.y, z:l.z||0, visibility:(l.visibility==null?0.9:l.visibility)})) ] : [];
+  });
+  log('备用姿态通道就绪 · 骨骼追踪可用','ok');
+  updateCoreLabel();
+}
+let ort=null, ortSess=null, yoloBusy=false;
+const yoloCv = document.createElement('canvas'); yoloCv.width=yoloCv.height=640;
+const yctx = yoloCv.getContext('2d',{willReadFrequently:true});
+const clamp01 = v => Math.max(0, Math.min(1, v));
+function iouXY(a,b){
+  const x1=Math.max(a.x0,b.x0), y1=Math.max(a.y0,b.y0), x2=Math.min(a.x1,b.x1), y2=Math.min(a.y1,b.y1);
+  const i=Math.max(0,x2-x1)*Math.max(0,y2-y1);
+  const u=(a.x1-a.x0)*(a.y1-a.y0)+(b.x1-b.x0)*(b.y1-b.y0)-i;
+  return u>0? i/u : 0;
+}
+async function yoloRun(){
+  const src=S.src;
+  if((src.videoWidth||0) < 16 || (src.videoHeight||0) < 9) return;
+  const w0=src.videoWidth, h0=src.videoHeight;
+  const s=Math.min(640/w0, 640/h0), dw=w0*s, dh=h0*s;
+  const px=(640-dw)/2, py=(640-dh)/2;
+  yctx.fillStyle='rgb(114,114,114)'; yctx.fillRect(0,0,640,640);
+  yctx.drawImage(src, px, py, dw, dh);
+  const d = yctx.getImageData(0,0,640,640).data;
+  const input = new Float32Array(3*640*640);
+  for(let i=0,p=0;i<d.length;i+=4,p++){
+    input[p]=d[i]/255; input[p+640*640]=d[i+1]/255; input[p+2*640*640]=d[i+2]/255;
+  }
+  const out = await ortSess.run({images:new ort.Tensor('float32', input, [1,3,640,640])});
+  const o = out[Object.keys(out)[0]];
+  const data=o.data, CC=o.dims[1], N=o.dims[2];
+  const cand=[];
+  for(let i=0;i<N;i++){
+    let bs=0, bi=0;
+    for(let c=4;c<CC;c++){ const v=data[c*N+i]; if(v>bs){ bs=v; bi=c-4; } }
+    if(bs<0.38) continue;
+    const cx=data[i], cy=data[N+i], bw=data[2*N+i], bh=data[3*N+i];
+    cand.push({x0:(cx-bw/2-px)/s/w0, y0:(cy-bh/2-py)/s/h0, x1:(cx+bw/2-px)/s/w0, y1:(cy+bh/2-py)/s/h0, score:bs, ci:bi});
+  }
+  cand.sort((a,b)=>b.score-a.score);
+  const keep=[];
+  for(const b of cand){
+    let dup=false; for(const k of keep){ if(iouXY(b,k)>0.5){ dup=true; break; } }
+    if(!dup) keep.push(b);
+    if(keep.length>=10) break;
+  }
+  S.yoloDets = keep.map(b=>({ cls: YOLO_CLS[b.ci]||'unknown', score:b.score,
+    x:clamp01(b.x0), y:clamp01(b.y0), w:clamp01(b.x1-b.x0), h:clamp01(b.y1-b.y0) }));
+  S.yoloTs = performance.now();
+}
+async function initYolo(){
+  log('正在挂载备用识别通道（首次较慢）…','warn');
+  ort = await import(ORT_URL);
+  ort.env.wasm.wasmPaths = ORT_WASM; ort.env.wasm.numThreads = 1;
+  ortSess = await ort.InferenceSession.create(YOLO_URL, {executionProviders:['wasm']});
+  log('备用识别通道就绪 · 已启用物体归类','ok');
+  updateCoreLabel();
+}
+function updateCoreLabel(){
+  const core = detector ? 'MP-CORE' : (ortSess ? 'YOLO' : 'MOTION');
+  const el = $('#mCore');
+  if(el.textContent !== core){
+    el.textContent = core;
+    el.style.color = detector ? C.ok : (ortSess ? C.warn : C.cy2);
+  }
+}
+async function initFallbacks(){
+  if(!poser) initLegacyPose().catch(()=>log('备用姿态通道不可用','warn'));
+  if(!detector) initYolo().catch(e=>{
+    log('备用识别通道不可用：'+(e.message||''),'warn');
+    setTimeout(()=>{ if(!ortSess && !detector){ log('重试挂载备用识别通道 …','warn'); initYolo().catch(()=>{}); } }, 20000);
+  });
+}
+
+/* ============================================================
+   坐标映射
+   ============================================================ */
+let MAP = {ox:0,oy:0,dw:1,dh:1,W:1,H:1};
+function updateMap(){
+  const cw = hud.clientWidth, ch = hud.clientHeight;
+  const src = S.src; if(!src) return;
+  const vw = Math.max(16, src.videoWidth || src.width || 16), vh = Math.max(9, src.videoHeight || src.height || 9);
+  const s = S.fit === 'contain' ? Math.min(cw/vw, ch/vh) : Math.max(cw/vw, ch/vh);
+  MAP = {ox:(cw - vw*s)/2, oy:(ch - vh*s)/2, dw:vw*s, dh:vh*s, W:cw, H:ch};
+}
+const mx = nx => MAP.ox + (S.mirror ? (1-nx) : nx) * MAP.dw;
+const my = ny => MAP.oy + ny * MAP.dh;
+const mw = nw => nw * MAP.dw;
+const mh = nh => nh * MAP.dh;
+
+/* ============================================================
+   颜色采样 / 运动检测
+   ============================================================ */
+const sampleCv = document.createElement('canvas'); const sctx2 = sampleCv.getContext('2d',{willReadFrequently:true});
+function sampleColor(t){
+  const src = S.src;
+  if((src.videoWidth||0) < 16 || (src.videoHeight||0) < 9) return;
+  const sw = 120, sh = Math.max(30, Math.round(120*(src.videoHeight||src.height)/(src.videoWidth||src.width)));
+  if(sampleCv.width!==sw){ sampleCv.width=sw; sampleCv.height=sh; }
+  sctx2.drawImage(src,0,0,sw,sh);
+  const nx = S.mirror ? (1-t.x) : t.x, ny = t.y;
+  const bw = Math.max(4, Math.round(t.bw*sw*0.36)), bh = Math.max(4, Math.round(t.bh*sh*0.36));
+  let x0 = Math.round(nx*sw - bw/2), y0 = Math.round(ny*sh - bh/2);
+  x0 = Math.max(0, Math.min(sw-bw, x0)); y0 = Math.max(0, Math.min(sh-bh, y0));
+  let d; try{ d = sctx2.getImageData(x0,y0,bw,bh).data; }catch(e){ return; }
+  const bins = new Map();
+  for(let i=0;i<d.length;i+=12){
+    const k = ((d[i]>>4)<<8) | ((d[i+1]>>4)<<4) | (d[i+2]>>4);
+    let v = bins.get(k); if(!v){ v=[0,0,0,0]; bins.set(k,v); }
+    v[0]+=d[i]; v[1]+=d[i+1]; v[2]+=d[i+2]; v[3]++;
+  }
+  let best=null; for(const v of bins.values()) if(!best || v[3]>best[3]) best=v;
+  if(!best) return;
+  const r=Math.round(best[0]/best[3]), g=Math.round(best[1]/best[3]), b=Math.round(best[2]/best[3]);
+  t.rgb=[r,g,b]; t.hex=hex(r,g,b); t.cname=colorName(r,g,b);
+}
+const mcv = document.createElement('canvas'); const mctx = mcv.getContext('2d',{willReadFrequently:true});
+let prevGray=null, mFrame=0;
+function motionDetect(){
+  const src = S.src;
+  if((src.videoWidth||0) < 16 || (src.videoHeight||0) < 9) return [];
+  const GW=44, GH=Math.max(18, Math.round(44*(src.videoHeight||src.height)/(src.videoWidth||src.width)));
+  if(mcv.width!==GW){ mcv.width=GW; mcv.height=GH; prevGray=null; }
+  mctx.drawImage(src,0,0,GW,GH);
+  const d = mctx.getImageData(0,0,GW,GH).data;
+  const g = new Uint8Array(GW*GH);
+  for(let i=0,p=0;i<d.length;i+=4,p++) g[p]=(d[i]*299+d[i+1]*587+d[i+2]*114)/1000;
+  if(!prevGray){ prevGray=g; return []; }
+  const raw = new Uint8Array(GW*GH);
+  for(let p=0;p<g.length;p++) raw[p] = Math.abs(g[p]-prevGray[p])>13 ? 1:0;
+  mFrame++;
+  if(mFrame % 4 === 0) prevGray = g;
+  const mask = new Uint8Array(GW*GH);
+  for(let y=0;y<GH;y++) for(let x=0;x<GW;x++){
+    if(!raw[y*GW+x]) continue;
+    for(let dy=-1;dy<=1;dy++) for(let dx=-1;dx<=1;dx++){
+      const nx2=x+dx, ny2=y+dy;
+      if(nx2<0||ny2<0||nx2>=GW||ny2>=GH) continue;
+      mask[ny2*GW+nx2]=1;
+    }
+  }
+  const seen = new Uint8Array(GW*GH), out=[];
+  for(let p=0;p<mask.length;p++){
+    if(!mask[p]||seen[p]) continue;
+    const q=[p]; let head=0, n=0, x0=1e9,y0=1e9,x1=-1,y1=-1;
+    seen[p]=1;
+    while(head<q.length){
+      const c=q[head++]; n++;
+      const cx=c%GW, cy=(c/GW)|0;
+      if(cx<x0)x0=cx; if(cx>x1)x1=cx; if(cy<y0)y0=cy; if(cy>y1)y1=cy;
+      for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1],[1,1],[-1,-1],[1,-1],[-1,1]]){
+        const a=cx+dx, b=cy+dy;
+        if(a<0||b<0||a>=GW||b>=GH) continue;
+        const np=b*GW+a;
+        if(mask[np] && !seen[np]){ seen[np]=1; q.push(np); }
+      }
+    }
+    if(n < 10 || n > GW*GH*0.5) continue;
+    out.push({ x:x0/GW, y:y0/GH, w:(x1-x0+1)/GW, h:(y1-y0+1)/GH, score:Math.min(.9, n/100) });
+  }
+  const merged=[];
+  for(const b of out){
+    let hit=null;
+    for(const m of merged){
+      const gapX = Math.max(0, Math.max(b.x,m.x) - Math.min(b.x+b.w, m.x+m.w));
+      const gapY = Math.max(0, Math.max(b.y,m.y) - Math.min(b.y+b.h, m.y+m.h));
+      const cd = Math.hypot((b.x+b.w/2)-(m.x+m.w/2), (b.y+b.h/2)-(m.y+m.h/2));
+      if((gapX<0.05 && gapY<0.05) || cd < (b.w+b.h+m.w+m.h)/4*0.8){ hit=m; break; }
+    }
+    if(hit){
+      const x0=Math.min(hit.x,b.x), y0=Math.min(hit.y,b.y);
+      const x1=Math.max(hit.x+hit.w,b.x+b.w), y1=Math.max(hit.y+hit.h,b.y+b.h);
+      hit.x=x0; hit.y=y0; hit.w=x1-x0; hit.h=y1-y0; hit.score=Math.max(hit.score,b.score);
+    } else merged.push({...b});
+  }
+  return merged.filter(b=> b.w*b.h < 0.5 && b.w*b.h > 0.002);
+}
+
+/* ============================================================
+   目标跟踪
+   ============================================================ */
+function iou(a,b){
+  const x1=Math.max(a.x,b.x), y1=Math.max(a.y,b.y);
+  const x2=Math.min(a.x+a.w,b.x+b.w), y2=Math.min(a.y+a.h,b.y+b.h);
+  const i=Math.max(0,x2-x1)*Math.max(0,y2-y1);
+  const u=a.w*a.h+b.w*b.h-i;
+  return u>0? i/u : 0;
+}
+function match(dets){
+  const ts = S.targets;
+  for(const t of ts) t._m=false;
+  const used = new Set();
+  for(const d of dets){
+    let best=null, bs=0.2;
+    for(let i=0;i<ts.length;i++){
+      const t=ts[i]; if(t._m||used.has(i)) continue;
+      let s = iou(t,d);
+      s += Math.max(0, 0.2 - Math.hypot(t.x-(d.x+d.w/2), t.y-(d.y+d.h/2))*1.5);
+      if(d.cls && t.cls && d.cls===t.cls) s += 0.15;
+      if(s>bs){ bs=s; best=i; }
+    }
+    if(best!=null){ const t=ts[best]; t._m=true; used.add(best); t._d=d; t.hits=(t.hits||0)+1; }
+    else {
+      ts.push({
+        id:S.seq++, cls:d.cls||'unknown', _d:d,
+        x:d.x+d.w/2, y:d.y+d.h/2, w:d.w, h:d.h,
+        bx:d.x, by:d.y, bw:d.w, bh:d.h,
+        score:d.score, born:performance.now(), last:performance.now(), lock:0, hits:1,
+        trail:[], rgb:[120,140,150], hex:'#7E8C96', cname:'采样中', status:'静止', speed:0,
+        pose:null, poseAge:0
+      });
+      const nm = (d.cls && d.cls!=='unknown') ? infoOf(d.cls).cn : guess({bw:d.w,bh:d.h,y:d.y}).cn;
+      lockFx();
+      log(`锁定新目标 #${String(S.seq-1).padStart(3,'0')} · ${nm}`, 'ok');
+    }
+  }
+  const now = performance.now();
+  // 全局抖动补偿：若多数目标同向位移，视为摄像头移动
+  let dxs=0, dys=0, cnt=0;
+  for(const t of ts){
+    if(t._d && t._px!=null){ dxs += t.x - t._px; dys += t.y - t._py; cnt++; }
+  }
+  const gdx = cnt>=2 ? dxs/cnt : 0, gdy = cnt>=2 ? dys/cnt : 0;
+  const camMoving = Math.hypot(gdx,gdy) > 0.004;
+
+  for(const t of ts){
+    if(t._d){
+      const d=t._d, px=t.x, py=t.y;
+      const k = t.lock>=1 ? 0.3 : 0.22;
+      t.bx += (d.x-t.bx)*k; t.by += (d.y-t.by)*k;
+      t.bw += (d.w-t.bw)*k; t.bh += (d.h-t.bh)*k;
+      t.x = t.bx+t.bw/2; t.y = t.by+t.bh/2; t.w=t.bw; t.h=t.bh;
+      t.score = t.score*0.7 + d.score*0.3;
+      t.last = now; t.lock = Math.min(1, t.lock+0.1);
+      let vx = t.x-px, vy = t.y-py;
+      if(camMoving && Math.hypot(gdx,gdy) > Math.hypot(vx,vy)*0.6){ vx-=gdx; vy-=gdy; }
+      const sp = Math.hypot(vx,vy);
+      t.speed = t.speed==null ? sp : t.speed*0.6 + sp*0.4;
+      if(S.trail && ts.length<=8){
+        t.trail.push({x:t.x,y:t.y});
+        if(t.trail.length>26) t.trail.shift();
+      }
+      t._px = t.x; t._py = t.y;
+      t._d = null;
+    } else {
+      const ttl = (t.cls && t.cls !== 'unknown') ? 3500 : 2500;
+      if(now - (t.last||t.born) > ttl) t.gone = true;
+    }
+    if((t.hits||0) < 3 && now - t.born > 1200) t.gone = true;
+    t.status = statusOf(t);
+  }
+  for(let i=0;i<ts.length;i++){
+    for(let j=ts.length-1;j>i;j--){
+      const a=ts[i], b=ts[j];
+      if(a.gone||b.gone) continue;
+      if(a.cls!==b.cls) continue;
+      const gapX = Math.max(0, Math.max(a.bx,b.bx) - Math.min(a.bx+a.bw, b.bx+b.bw));
+      const gapY = Math.max(0, Math.max(a.by,b.by) - Math.min(a.by+a.bh, b.by+b.bh));
+      const vague = !a.cls || a.cls==='unknown';
+      const close = vague
+        ? (iou(a,b)>0.3 || (gapX<0.05 && gapY<0.05) ||
+           Math.hypot(a.x-b.x, a.y-b.y) < (a.w+a.h+b.w+b.h)/8)
+        : (iou(a,b)>0.5);
+      if(close){
+        a.bx=Math.min(a.bx,b.bx); a.by=Math.min(a.by,b.by);
+        a.bw=Math.max(a.bw,b.bw); a.bh=Math.max(a.bh,b.bh);
+        a.x=a.bx+a.bw/2; a.y=a.by+a.bh/2; a.w=a.bw; a.h=a.bh;
+        a.score=Math.max(a.score,b.score);
+        a.last=Math.max(a.last||0,b.last||0);
+        a.hits=Math.max(a.hits||1,b.hits||1);
+        b.gone=true;
+      }
+    }
+  }
+  for(let i=ts.length-1;i>=0;i--){
+    if(ts[i].gone){
+      const t=ts[i];
+      if(now - t.born > 2500){ lostFx(); log(`目标 #${String(t.id).padStart(3,'0')} 脱离视野`,'warn'); }
+      ts.splice(i,1);
+    }
+  }
+  if(ts.length>12){
+    ts.sort((a,b)=> (b.hits||0)-(a.hits||0));
+    ts.splice(12);
+  }
+}
+/* 静止就是静止 */
+function statusOf(t){
+  const sp = t.speed || 0;
+  if(sp < 0.0016) return '静止';
+  if(sp < 0.008)  return '移动';
+  return '高速移动';
+}
+
+/* ============================================================
+   姿态
+   ============================================================ */
+const LINKS = [[11,12],[11,23],[12,24],[23,24],[11,13],[13,15],[12,14],[14,16],
+               [23,25],[25,27],[24,26],[26,28],[27,31],[27,29],[29,31],[28,32],[28,30],[30,32]];
+function poseAttach(){
+  const now = performance.now();
+  for(const t of S.targets) t._pose=null;
+  for(const p of S.poses){
+    const vis = k => p[k] && (p[k].visibility==null || p[k].visibility>0.35);
+    let cx=0, cy=0, n=0;
+    for(const k of [23,24,11,12]) if(vis(k)){ cx += (S.mirror?1-p[k].x:p[k].x); cy += p[k].y; n++; }
+    if(!n) continue; cx/=n; cy/=n;
+    let best=null, bd=1e9;
+    for(const t of S.targets){
+      if(t._pose) continue;
+      if(t.cls && t.cls!=='person' && t.cls!=='unknown') continue;
+      const d = Math.hypot(t.x-cx, t.y-cy);
+      if(d<bd && d<0.3){ bd=d; best=t; }
+    }
+    if(!best) continue;
+    best._pose=p; best.pose=p; best.poseAge=now;
+  }
+}
+const PARTS = [[0,'头部'],[11,'左肩'],[12,'右肩'],[23,'左髋'],[24,'右髋'],[13,'左肘'],[14,'右肘'],
+  [15,'左手'],[16,'右手'],[25,'左膝'],[26,'右膝'],[27,'左脚踝'],[28,'右脚踝'],[31,'左脚'],[32,'右脚']];
+
+/* ============================================================
+   绘制
+   ============================================================ */
+function txt(s,x,y,{size=9,color=C.cy,align='left',weight='',bg=null}={}){
+  ctx.font = `${weight} ${size}px "SFMono-Regular",Menlo,Consolas,"PingFang SC","Microsoft YaHei",monospace`;
+  ctx.textAlign = align; ctx.textBaseline='middle';
+  if(bg){
+    const w = ctx.measureText(s).width;
+    const bx = align==='left' ? x-2 : align==='right' ? x-w-2 : x-w/2-2;
+    ctx.fillStyle=bg; ctx.fillRect(bx, y-size*0.7, w+4, size*1.4);
+  }
+  ctx.fillStyle=color; ctx.fillText(s,x,y);
+}
+function bracket(x,y,w,h,len,color,lw){
+  ctx.strokeStyle=color; ctx.lineWidth=lw; ctx.lineCap='butt';
+  for(const [px,py,sx,sy] of [[x,y,1,1],[x+w,y,-1,1],[x,y+h,1,-1],[x+w,y+h,-1,-1]]){
+    ctx.beginPath(); ctx.moveTo(px+sx*len,py); ctx.lineTo(px,py); ctx.lineTo(px,py+sy*len); ctx.stroke();
+  }
+}
+const focalPx = ()=> MAP.H / (2*Math.tan(30*Math.PI/180));
+function distOf(t){
+  const rh = HREAL[t.cls]; if(!rh) return null;
+  const pxH = mh(t.bh); if(pxH<4) return null;
+  const d = (rh*focalPx())/pxH;
+  return { text: d>30?'>30m':d.toFixed(d<10?2:1)+'m',
+           size:`${Math.round(mw(t.bw)*d/focalPx()*100)}×${Math.round(pxH*d/focalPx()*100)}cm` };
+}
+let placed=[];
+function placePanel(x,y,w,h){
+  let ny = y;
+  for(let k=0;k<10;k++){
+    let hit=false;
+    for(const r of placed){
+      if(!(x+w<r.x-4 || x>r.x+r.w+4 || ny+h<r.y-4 || ny>r.y+r.h+4)){ hit=true; ny=r.y+r.h+5; }
+    }
+    if(!hit) break;
+  }
+  ny = Math.max(32, Math.min(MAP.H-h-58, ny));
+  placed.push({x,y:ny,w,h});
+  return ny;
+}
+function drawTarget(t, isSel, withPanel){
+  const X=mx(t.bx), Y=my(t.by), W=mw(t.bw), H=mh(t.bh);
+  if(W<6||H<6) return;
+  const cx=X+W/2, cy=Y+H/2;
+  const info = describe(t);
+  const col = (t.cls==='person') ? C.cy : (isSel ? '#ffffff' : C.cy);
+  const locking = t.lock < 1;
+  ctx.save(); ctx.globalAlpha = 0.4 + 0.6*t.lock;
+
+  if(S.trail && t.trail.length>2 && S.targets.length<=8){
+    ctx.strokeStyle='rgba(0,255,213,.38)'; ctx.lineWidth=1.3; ctx.beginPath();
+    t.trail.forEach((p,i)=>{ const a=mx(p.x), b=my(p.y); i?ctx.lineTo(a,b):ctx.moveTo(a,b); });
+    ctx.stroke();
+  }
+  const grow = locking ? 1+(1-t.lock)*0.45 : 1;
+  const gx=X-(W*(grow-1))/2, gy=Y-(H*(grow-1))/2, gw=W*grow, gh=H*grow;
+  bracket(gx,gy,gw,gh, Math.min(16, Math.max(7, gw*0.16)), locking?C.warn:col, isSel?2.4:1.7);
+  if(!S.freeze && isSel){
+    const p=(performance.now()%1600)/1600;
+    ctx.strokeStyle='rgba(0,255,213,.5)'; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(gx,gy+gh*p); ctx.lineTo(gx+gw,gy+gh*p); ctx.stroke();
+  }
+  ctx.fillStyle=locking?C.warn:col;
+  for(const [px,py] of [[gx,gy],[gx+gw,gy],[gx,gy+gh],[gx+gw,gy+gh]]) ctx.fillRect(px-1.5,py-1.5,3,3);
+
+  const label = `${locking?'◎':'●'}${String(t.id).padStart(3,'0')} ${info.cn}`;
+  let lx=gx, ly=gy-12;
+  if(ly<34) ly = gy+gh+12;
+  txt(label, lx, ly, {size:9.5, color:'#01121a', bg:locking?C.warn:col, weight:'700'});
+
+  if(!withPanel){ ctx.restore(); return; }
+
+  const pw = 126, ph = 8 + (2 + (S.color?2:0) + 1 + (HREAL[t.cls]?1:0)) * 10.5 + 4;
+  const LL = 158, RL = MAP.W - 194 - pw;
+  let pxp = cx + W/2 + 12, pyp = cy - ph/2;
+  if(pxp > RL) pxp = cx - W/2 - 12 - pw;
+  if(RL > LL) pxp = Math.max(LL, Math.min(RL, pxp));
+  pxp = Math.max(6, Math.min(MAP.W - pw - 6, pxp));
+  pyp = placePanel(pxp, pyp, pw, ph);
+  const ax = (pxp > cx) ? gx+gw : gx, ay = gy + gh*0.35;
+  ctx.strokeStyle='rgba(0,255,213,.55)'; ctx.lineWidth=1; ctx.setLineDash([3,3]);
+  ctx.beginPath(); ctx.moveTo(ax,ay); ctx.lineTo(ax+(pxp-ax)*0.45, ay);
+  ctx.lineTo(pxp + (pxp>cx?-8:pw+8), pyp+10); ctx.stroke(); ctx.setLineDash([]);
+
+  ctx.fillStyle='rgba(0,14,20,.72)'; ctx.fillRect(pxp,pyp,pw,ph);
+  ctx.strokeStyle='rgba(0,255,213,.3)'; ctx.lineWidth=1; ctx.strokeRect(pxp,pyp,pw,ph);
+  ctx.fillStyle=col; ctx.fillRect(pxp,pyp,2.5,ph);
+  let ty = pyp + 9;
+  txt(`ID ${String(t.id).padStart(3,'0')} · ${info.cat} · ${(t.score*100).toFixed(0)}%`,
+      pxp+7, ty, {size:8, color:C.cy2}); ty+=10.5;
+  txt(`类型 ${info.cn}`, pxp+7, ty, {size:8.5, color:C.white}); ty+=10.5;
+  if(S.color){
+    ctx.fillStyle=t.hex; ctx.fillRect(pxp+7, ty-3.5, 9, 7);
+    ctx.strokeStyle='rgba(255,255,255,.35)'; ctx.lineWidth=1; ctx.strokeRect(pxp+7, ty-3.5, 9, 7);
+    txt(`${t.cname} ${t.hex}`, pxp+20, ty, {size:8, color:C.cy2}); ty+=10.5;
+    txt(`RGB(${t.rgb.join(',')})`, pxp+7, ty, {size:7.5, color:'rgba(125,249,255,.65)'}); ty+=10.5;
+  }
+  const stCol = t.status==='静止' ? C.ok : (t.status==='高速移动' ? C.bad : C.warn);
+  txt(`状态 ${t.status}`, pxp+7, ty, {size:8.5, color:stCol}); ty+=10.5;
+  const dd = distOf(t);
+  if(dd) txt(`距离 ${dd.text} · ${dd.size}`, pxp+7, ty, {size:7.5, color:'rgba(125,249,255,.65)'});
+
+  if(S.pose && t.pose && (S.freeze || performance.now()-t.poseAge < 1000)){
+    const p=t.pose;
+    ctx.lineWidth = isSel?2.4:1.8; ctx.strokeStyle = isSel?'#ffffff':'rgba(0,255,213,.85)';
+    for(const [a,b] of LINKS){
+      const A=p[a], B=p[b];
+      if(!A||!B||A.visibility<0.3||B.visibility<0.3) continue;
+      ctx.beginPath(); ctx.moveTo(mx(A.x),my(A.y)); ctx.lineTo(mx(B.x),my(B.y)); ctx.stroke();
+    }
+    ctx.fillStyle=C.cy2;
+    for(const [k] of PARTS){ const P=p[k]; if(!P||P.visibility<0.35) continue;
+      ctx.beginPath(); ctx.arc(mx(P.x),my(P.y), isSel?3:2.2,0,7); ctx.fill(); }
+    if(S.detail && S.pose && S.targets.length<=3 && S.degrade===0){
+      for(const [k,nm] of PARTS){
+        const P=p[k]; if(!P||P.visibility<0.45) continue;
+        const px2=mx(P.x), py2=my(P.y);
+        const off = (px2 < MAP.W/2) ? -8 : 8;
+        ctx.strokeStyle='rgba(0,255,213,.3)'; ctx.lineWidth=1;
+        ctx.beginPath(); ctx.moveTo(px2,py2); ctx.lineTo(px2+off, py2-7); ctx.stroke();
+        txt(nm, px2+off+(off<0?3:-3), py2-11, {size:7.5, color:C.cy2, align: off<0?'left':'right', bg:BG});
+      }
+      zoneBox(p,[0,1,2,3,4,5,6,7,8,9,10],'HEAD 头部');
+      zoneBox(p,[11,12,23,24],'TORSO 躯干');
+      zoneBox(p,[23,25,27],'LEG-L'); zoneBox(p,[24,26,28],'LEG-R');
+      zoneBox(p,[27,29,31],'FOOT-L'); zoneBox(p,[28,30,32],'FOOT-R');
+      zoneBox(p,[11,13,15],'ARM-L'); zoneBox(p,[12,14,16],'ARM-R');
+    }
+  }
+  ctx.restore();
+}
+function zoneBox(p, keys, name){
+  let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9,n=0;
+  for(const k of keys){ const P=p[k]; if(!P||P.visibility<0.3) continue;
+    const X=mx(P.x), Y=my(P.y);
+    x0=Math.min(x0,X);x1=Math.max(x1,X);y0=Math.min(y0,Y);y1=Math.max(y1,Y);n++; }
+  if(n<1) return;
+  const pad=5;
+  ctx.strokeStyle='rgba(125,249,255,.24)'; ctx.lineWidth=1; ctx.setLineDash([2,4]);
+  ctx.strokeRect(x0-pad,y0-pad,(x1-x0)+pad*2,(y1-y0)+pad*2); ctx.setLineDash([]);
+  txt(name, x0-pad+2, y0-pad-5, {size:7.5, color:'rgba(125,249,255,.7)', bg:BG});
+}
+function drawReticle(){
+  const cx=MAP.W/2, cy=MAP.H*0.45, R=14;
+  ctx.strokeStyle='rgba(0,255,213,.4)'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.arc(cx,cy,R,0,7); ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(cx-R-6,cy); ctx.lineTo(cx-R+3,cy); ctx.moveTo(cx+R-3,cy); ctx.lineTo(cx+R+6,cy);
+  ctx.moveTo(cx,cy-R-6); ctx.lineTo(cx,cy-R+3); ctx.moveTo(cx,cy+R-3); ctx.lineTo(cx,cy+R+6);
+  ctx.stroke();
+  ctx.fillStyle='rgba(0,255,213,.8)'; ctx.fillRect(cx-1,cy-1,2,2);
+  if(S.targets.length<=6){
+    for(const t of S.targets){
+      if((t.hits||0)<3) continue;
+      ctx.strokeStyle='rgba(0,255,213,.13)'; ctx.lineWidth=1; ctx.setLineDash([1,6]);
+      ctx.beginPath(); ctx.moveTo(cx,cy); ctx.lineTo(mx(t.x),my(t.y)); ctx.stroke(); ctx.setLineDash([]);
+    }
+  }
+}
+function drawAudio(){
+  if(!S.audio || !S.au.on || !S.au.spec) return;
+  const n=40, bw=3, gap=2, total=n*(bw+gap)-gap;
+  const x0=(MAP.W-total)/2, yb=MAP.H-56;
+  for(let i=0;i<n;i++){
+    const v=S.au.spec[i]/255, h=Math.max(2, v*36);
+    ctx.fillStyle = v>0.6 ? C.warn : (v>0.28 ? C.cy : 'rgba(14,90,85,.75)');
+    ctx.fillRect(x0+i*(bw+gap), yb-h, bw, h);
+  }
+  txt(`◉ ${S.au.label} ${S.au.en}  ${S.au.db.toFixed(0)}dB  ${Math.round(S.au.hz)}Hz`,
+      MAP.W/2, yb+10, {size:9, align:'center', color:S.au.col||C.cy2, bg:BG});
+}
+
+/* ============================================================
+   主循环（检测降频 + 绘制全速）
+   ============================================================ */
+let lowFps=0;
+let frames=0, fpsT=performance.now(), tsSeq=0, auT=0, detT=0, poseT=0, yoloT=0, motT=0;
+function loop(){
+  requestAnimationFrame(loop);
+  if(!S.ready) return;
+  const src = S.src, now = performance.now();
+  if(now - fpsT > 1000){
+    S.fps = Math.round(frames*1000/(now-fpsT)); frames=0; fpsT=now;
+    const f=$('#mFps'); f.textContent=S.fps; f.className = S.fps<20?'warnv':'';
+    if(S.fps < 22) lowFps++; else lowFps = Math.max(0, lowFps-1);
+    if(lowFps >= 4 && S.degrade < 2){
+      S.degrade++; lowFps = 0;
+      if(S.degrade === 1){ S.trail = false; log('性能不足 · 已自动关闭运动轨迹','warn'); }
+      else { S.detail = false; S.pose = false; log('性能不足 · 已自动关闭骨骼标注','warn'); }
+      syncBtns();
+    }
+  }
+  if(S.switching) { render(); return; }
+  if(!S.freeze){
+    // —— 物体检测：约 8fps ——
+    if(now - detT > 125){
+      detT = now; tsSeq += 34;
+      try{
+        let dets = null;
+        if(detector && S.obj){
+          const r = detector.detectForVideo(src, tsSeq);
+          const iw = src.videoWidth, ih = src.videoHeight;
+          dets = r.detections.map(d=>({
+            cls: d.categories[0].categoryName, score:d.categories[0].score,
+            x:d.boundingBox.originX/iw, y:d.boundingBox.originY/ih,
+            w:d.boundingBox.width/iw,   h:d.boundingBox.height/ih }));
+        } else if(S.motion || !detector){
+          if(S.motDets && now - (S.motTs||0) < 500) dets = S.motDets;
+        }
+        if(S.yoloDets && now-(S.yoloTs||0) < 9000){
+          if(!dets) dets = [];
+          const age = (now - (S.yoloTs||0)) / 9000;
+          for(const d of dets){
+            if(d.cls && d.cls!=='unknown') continue;
+            let best=null, bs=0.25;
+            for(const y of S.yoloDets){ const sc=iou(d,y); if(sc>bs){ bs=sc; best=y; } }
+            if(best){ d.cls=best.cls; d.score=Math.max(d.score, best.score - age*0.15); }
+          }
+          for(const y of S.yoloDets){
+            let cov=false;
+            for(const d of dets){ if(iou(d,y)>0.3){ cov=true; break; } }
+            if(!cov) dets.push({...y, static:true});
+          }
+        }
+        match(dets || []);
+      }catch(e){}
+    }
+    // —— 运动感应：独立频率 ~15fps ——
+    if((S.motion || !detector) && now - motT > 66){
+      motT = now;
+      const raw = motionDetect();
+      if(raw.length){
+        raw.sort((a,b)=> b.w*b.h - a.w*a.h);
+        S.motDets = raw.slice(0,10).map(d=>({...d, cls:'unknown'}));
+        S.motTs = now;
+      }
+    }
+    // —— 姿态：约 8fps ——
+    if(S.pose && now - poseT > 130){
+      poseT = now;
+      if(poser){
+        try{ const r = poser.detectForVideo(src, tsSeq); S.poses = r.landmarks || []; }
+        catch(e){ S.poses=[]; }
+      } else if(legacyPose && !legacyBusy){
+        legacyBusy = true;
+        Promise.resolve(legacyPose.send({image:src})).catch(()=>{}).finally(()=>{ legacyBusy=false; });
+      }
+    }
+    poseAttach();
+    // —— 颜色：约 3fps ——
+    if(S.color && now - S.lastColor > 330){
+      S.lastColor = now;
+      for(const t of S.targets) sampleColor(t);
+    }
+    // —— YOLO ——
+    if(ortSess && S.obj && !yoloBusy && now - (S.yoloTs||0) > 3000){
+      yoloBusy = true;
+      yoloRun().catch(()=>{}).finally(()=>{ yoloBusy=false; S.yoloTs = performance.now(); });
+    }
+  }
+  if(S.audio && S.au.on && now - auT > 110){ auT = now; audioTick(); }
+  render();
+  updateUI();
+  frames++;
+}
+function render(){
+  const dpr = Math.min(2, window.devicePixelRatio||1);
+  const w = hud.clientWidth, h = hud.clientHeight;
+  if(hud.width !== Math.round(w*dpr) || hud.height !== Math.round(h*dpr)){
+    hud.width = Math.round(w*dpr); hud.height = Math.round(h*dpr);
+  }
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.clearRect(0,0,w,h);
+  updateMap();
+  placed = [];
+  drawReticle();
+  const vis = S.targets.filter(t=>(t.hits||0)>=3);
+  // 面板优先级：选中 > 已识别类别 > 面积大
+  const ranked = vis.slice().sort((a,b)=>{
+    const sa = (a.id===S.selected?100:0) + ((a.cls&&a.cls!=='unknown')?50:0) + a.bw*a.bh*100;
+    const sb = (b.id===S.selected?100:0) + ((b.cls&&b.cls!=='unknown')?50:0) + b.bw*b.bh*100;
+    return sb - sa;
+  });
+  const maxPanels = h < 460 ? 3 : 5;
+  const panelSet = new Set(ranked.slice(0, maxPanels).map(t=>t.id));
+  for(const t of vis) drawTarget(t, t.id===S.selected, panelSet.has(t.id));
+  drawAudio();
+  if(S.freeze) txt('▮ FRAME FROZEN / 已冻结', MAP.W/2, MAP.H-74, {size:10, color:C.warn, align:'center', bg:'rgba(20,10,0,.7)'});
+}
+function updateUI(){
+  const vis = S.targets.filter(t=>(t.hits||0)>=3);
+  $('#mLock').textContent = vis.length;
+  $('#mCnt').textContent  = vis.length;
+  $('#mState').textContent = S.freeze ? 'FROZEN' : (detector ? 'ACTIVE' : (ortSess ? 'ANALYZE' : 'MOTION'));
+  updateCoreLabel();
+  const lb = $('#listBody');
+  const ids = vis.map(t=>t.id).join(',');
+  if(lb._v !== ids){
+    lb._v = ids; lb.innerHTML='';
+    for(const t of vis){
+      const info = describe(t);
+      const row = document.createElement('div');
+      row.className = 'lrow' + (t.id===S.selected?' sel':'');
+      row.innerHTML = `<span>${String(t.id).padStart(3,'0')}</span><i>${info.cn}</i><u>${t.status}</u>`;
+      row.onclick = ()=>{ S.selected = (S.selected===t.id ? -1 : t.id); SFX.click(); };
+      lb.appendChild(row);
+    }
+  } else {
+    const rows = lb.children;
+    for(let i=0;i<rows.length && i<vis.length;i++){
+      const u = rows[i].querySelector('u');
+      if(u && u.textContent !== vis[i].status) u.textContent = vis[i].status;
+    }
+  }
+}
+
+/* ============================================================
+   开机序列
+   ============================================================ */
+const BOOT_LINES = [
+  { t:'地球online正在启动.........', k:'work', s:'boot',  d:460 },
+  { t:'启动成功',                   k:'ok',   s:'ok',    d:400 },
+  { t:'尝试注入中........',         k:'work', s:'work',  d:360 },
+  { t:'外骨骼识别系统注入成功',     k:'ok',   s:'ok',    d:340 },
+  { t:'人物识别系统注入成功',       k:'ok',   s:'ok',    d:340 },
+  { t:'事物识别系统注入成功',       k:'ok',   s:'ok',    d:340 },
+  { t:'正在启用视觉系统',           k:'work', s:'work',  d:380 },
+  { t:'视觉系统已启动完成',         k:'ok',   s:'ok',    d:380 },
+  { t:'正在注入世界观',             k:'work', s:'work',  d:480 },
+  { t:'世界观已注入成功',           k:'ok',   s:'chord', d:480 }
+];
+async function typeLine(text, kind){
+  const el = document.createElement('div');
+  el.className = 'ln ' + kind;
+  const tag = kind==='ok' ? '[ OK ]' : kind==='bad' ? '[FAIL]' : '[ .. ]';
+  el.innerHTML = `<span class="tag">${tag}</span><span class="tx"></span><span class="cur"></span>`;
+  btline.appendChild(el);
+  while(btline.children.length > 9) btline.firstChild.remove();
+  const tx = el.querySelector('.tx');
+  for(let i=0;i<text.length;i++){
+    tx.textContent += text[i];
+    if(i % 2 === 0) SFX.type();
+    await sleep(text[i]==='.' ? 20 : 38);
+  }
+  await sleep(110);
+  const c = el.querySelector('.cur'); if(c) c.remove();
+}
+async function bootSequence(){
+  btline.innerHTML = '';
+  btip.textContent = '正在建立链路 …';
+  startBootMusic();
+  const camP = openCamera({facing:curFacing}).catch(e=>({err:e}));
+  const modP = withTimeout(initModelsCore(), 18000).catch(()=>null);
+  let camOK = true;
+  for(let i=0;i<BOOT_LINES.length;i++){
+    const L = BOOT_LINES[i];
+    prog.style.width = Math.round(i/BOOT_LINES.length*100) + '%';
+    await typeLine(L.t, L.k);
+    if(L.s==='boot') SFX.boot(); else if(L.s==='ok') SFX.ok();
+    else if(L.s==='work') SFX.work(); else if(L.s==='chord') SFX.chord();
+    log(L.t, L.k==='ok'?'ok':'warn');
+    await sleep(L.d);
+    if(i===5) await Promise.race([modP, sleep(2000)]);
+    if(i===6){
+      const r = await Promise.race([camP, sleep(7000)]);
+      if(r && r.err){
+        camOK = false;
+        const last = btline.lastChild;
+        if(last){
+          last.className = 'ln bad';
+          last.querySelector('.tag').textContent = '[FAIL]';
+          last.querySelector('.tx').textContent = '视觉系统接入失败 · ' + (r.err.name||r.err.message||'');
+        }
+        SFX.fail();
+        log('摄像头接入失败：' + (r.err.name||r.err.message||''), 'bad');
+      }
+    }
+  }
+  prog.style.width = '100%';
+  if(!camOK){
+    stopBootMusic(0.6);
+    btip.innerHTML = '视觉传感器不可用 · 请允许摄像头权限后重试<br>（需通过 http/https 或 localhost 打开，不能是本地文件）';
+    tapBtn.style.display='block'; tapBtn.textContent='↻ 重试接入';
+    tapBtn.onclick = ()=>{ SFX.click(); bootSequence(); };
+    return;
+  }
+  const camR = await camP;
+  if(camR && camR.err){ stopBootMusic(0.6); tapBtn.style.display='block'; tapBtn.onclick=()=>bootSequence(); return; }
+  await modP.catch(()=>{});
+  if(!detector && !ortSess){
+    S.motion = true;
+    log('识别模型暂不可用 · 先启用运动感应扫描','warn');
+    syncBtns();
+  }
+  await refreshCams();
+  btip.textContent = '注入完成 · 正在进入地球 ONLINE';
+  SFX.gate();
+  $('#flash').style.opacity = '0.85';
+  await sleep(180);
+  $('#flash').style.opacity = '0';
+  boot.classList.add('done');
+  stopBootMusic(1.6);
+  setTimeout(()=>{ boot.style.display='none'; }, 520);
+  updateMap();
+  S.ready = true;
+  requestAnimationFrame(loop);
+  await initMic();
+  initFallbacks();
+  log('系统就绪 · 欢迎回到地球 ONLINE','ok');
+  if(detector) log('视觉核心：MediaPipe 实时识别','ok');
+  else log('正在后台挂载备用识别通道，稍后自动生效','warn');
+}
+
+/* ============================================================
+   交互
+   ============================================================ */
+function syncBtns(){
+  document.querySelectorAll('#ctl .btn').forEach(b=>{
+    const k = b.dataset.k;
+    if(['cap','full','swap','mir','fit'].includes(k)) return;
+    b.classList.toggle('on', !!S[k]);
+  });
+  document.querySelector('.btn[data-k="mir"]').classList.toggle('on', !!S.mirror);
+  const fb = document.querySelector('.btn[data-k="fit"]');
+  fb.classList.toggle('on', S.fit==='cover');
+  fb.textContent = S.fit==='cover' ? '铺满' : '完整';
+}
+$('#ctl').addEventListener('click', e=>{
+  const b = e.target.closest('.btn'); if(!b) return;
+  const k = b.dataset.k;
+  if(k==='cap'){ SFX.click(); capture(); return; }
+  if(k==='swap'){ switchCam(); return; }
+  if(k==='full'){
+    SFX.click();
+    if(!document.fullscreenElement) document.documentElement.requestFullscreen?.();
+    else document.exitFullscreen?.();
+    return;
+  }
+  if(k==='mir'){ S.mirror = !S.mirror; updateMap(); syncBtns(); SFX.click();
+                 log('镜像已' + (S.mirror?'开启':'关闭')); return; }
+  if(k==='fit'){ S.fit = S.fit==='cover' ? 'contain' : 'cover'; updateMap(); syncBtns(); SFX.click();
+                 log('画面模式：' + (S.fit==='cover'?'铺满（裁切）':'完整（留边）')); return; }
+  S[k] = !S[k]; SFX.click();
+  if(k==='audio' && !S[k]){ $('#aState').textContent='OFF'; $('#aState').style.color=C.dim; }
+  if(k==='audio' && S[k] && !analyser) initMic().then(()=>{ if(S.audio){ $('#aState').textContent='ON'; $('#aState').style.color=C.ok; } });
+  if(k==='motion' && S[k] && detector && S.obj) S.obj = false;
+  if(k==='obj' && S[k]) S.motion = false;
+  if(k==='freeze' && S[k]) log('画面冻结 · 标注已定格','warn');
+  syncBtns();
+});
+hud.addEventListener('click', e=>{
+  const r = hud.getBoundingClientRect();
+  const px = e.clientX-r.left, py = e.clientY-r.top;
+  let best=null, bd=1e9;
+  for(const t of S.targets){
+    const X=mx(t.bx),Y=my(t.by),W=mw(t.bw),H=mh(t.bh);
+    if(px>=X&&px<=X+W&&py>=Y&&py<=Y+H){
+      const d=Math.hypot(px-(X+W/2), py-(Y+H/2));
+      if(d<bd){ bd=d; best=t; }
+    }
+  }
+  S.selected = best ? (S.selected===best.id ? -1 : best.id) : -1;
+  if(best){ SFX.lock(); toast(`已选中 ${describe(best).cn}`, 1200); }
+});
+window.addEventListener('resize', updateMap);
+window.addEventListener('orientationchange', ()=>setTimeout(updateMap, 350));
+
+function capture(){
+  const w=hud.width, h=hud.height;
+  const out=document.createElement('canvas'); out.width=w; out.height=h;
+  const o=out.getContext('2d');
+  const src=S.src;
+  const vw=src.videoWidth||src.width, vh=src.videoHeight||src.height;
+  const s=(S.fit==='contain'?Math.min(w/vw,h/vh):Math.max(w/vw,h/vh)), dw=vw*s, dh=vh*s;
+  o.drawImage(src, (w-dw)/2, (h-dh)/2, dw, dh);
+  o.drawImage(hud, 0, 0);
+  const a=document.createElement('a');
+  a.download = `earth-online-${Date.now()}.png`;
+  a.href = out.toDataURL('image/png');
+  a.click();
+  log('已导出当前帧快照','ok');
+}
+
+/* ============================================================
+   启动
+   ============================================================ */
+syncBtns();
+if(location.protocol === 'file:'){
+  btip.innerHTML = '⚠ 以本地文件方式打开，浏览器将禁用摄像头<br>请用 http:// 访问（电脑执行 python3 -m http.server 后手机访问局域网地址）';
+}
+if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+  btip.textContent = '当前环境不支持摄像头接口，无法接入视觉系统。';
+  tapBtn.style.display = 'none';
+}
+tapBtn.onclick = async ()=>{
+  tapBtn.style.display = 'none';
+  initAudio(); resumeAC();
+  SFX.key();
+  await bootSequence();
+};
+log('EARTH ONLINE 引导程序已加载');
+window.S = S;
+window.EO = { diag:()=>({detector:!!detector, poser:!!poser, legacy:!!legacyPose, ort:!!ortSess,
+  mic:!!analyser, ready:S.ready, n:S.targets.length, au:S.au.label, cam:camLabel}) };
+</script>
+</body>
+</html>
